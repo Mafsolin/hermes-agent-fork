@@ -50,14 +50,9 @@ custom_providers:
     base_url: "https://api.mafsolin.space/v1"
     api_mode: "chat_completions"
     api_key: "${MAFSOLIN_SEARCH_API_KEY}"
-    model: "antigravity/claude-sonnet-4-6"
+    model: "antigravity/gemini-3.6-flash-high"
     discover_models: false
     models:
-      antigravity/claude-sonnet-4-6:
-        name: "antigravity/claude-sonnet-4-6"
-        context_length: 1048576
-        max_output_tokens: 65536
-        no_image_support: false
       antigravity/gemini-3.1-flash-lite:
         name: "antigravity/gemini-3.1-flash-lite"
         context_length: 1048576

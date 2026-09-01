@@ -64,8 +64,8 @@ Afsol формат `custom_providers` и содержит:
 - `ModelHub` — `https://modelhub.my/v1`, ключ из `MODELHUB_API_KEY`,
   10 моделей, default `claude-sonnet-5`;
 - `Mafsolin` — `https://api.mafsolin.space/v1`, ключ из
-  `MAFSOLIN_SEARCH_API_KEY`, 10 моделей, default
-  `antigravity/claude-sonnet-4-6`.
+  `MAFSOLIN_SEARCH_API_KEY`, 9 моделей, default
+  `antigravity/gemini-3.6-flash-high`.
 
 В конфиге намеренно оставлено `discover_models: false`: список моделей —
 явный allowlist, чтобы автоматический каталог провайдера не изменил поведение
@@ -75,9 +75,11 @@ Afsol формат `custom_providers` и содержит:
 При контрольной проверке 2026-09-01 оба endpoint-а вернули `200` на
 авторизованный `/v1/models`. Из старого live-списка ModelHub исключены три ID,
 которые API больше не возвращает: `deepseek-v4-flash`, `deepseek-v4-pro` и
-`grok-4-5`. Доступные дополнительные модели не добавлялись автоматически —
-это позволяет сначала проверить их отдельно и затем осознанно расширить
-allowlist.
+`grok-4-5`. Модель Mafsolin
+`antigravity/claude-sonnet-4-6` также исключена после трёх последовательных
+проверок: endpoint её больше не возвращает. Доступные дополнительные модели
+не добавлялись автоматически — это позволяет сначала проверить их отдельно и
+затем осознанно расширить allowlist.
 
 Для восстановления на новом профиле сначала сделайте копию конфига, затем
 объедините только нужные верхнеуровневые ключи из overlay с локальным
