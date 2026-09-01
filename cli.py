@@ -12901,8 +12901,15 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._handle_fast_command(cmd_original)
         elif canonical == "compress":
             self._manual_compress(cmd_original)
-        elif canonical == "usage":
-            self._handle_usage_command(cmd_original)
+        elif canonical == "tokens":
+            # Keep the historical `/tokens` surface while retaining the
+            # upstream `/usage reset` subcommand semantics.
+            if len(cmd_original.split()) > 1:
+                self._handle_usage_command(cmd_original)
+            else:
+                self._show_tokens()
+        elif canonical == "limits":
+            self._show_limits()
         elif canonical == "subscription":
             self._show_subscription()
         elif canonical == "topup":
@@ -14233,6 +14240,16 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             print(f"  Unknown /usage subcommand: {' '.join(parts[1:])}. Try /usage or /usage reset [--force].")
             return
         self._show_usage()
+
+    def _show_tokens(self):
+        """Show the canonical token-usage report (`/tokens`)."""
+        self._show_usage()
+
+    def _show_limits(self):
+        """Show configured provider limits without coupling to agent state."""
+        from agent.apistore_limits import fetch_apistore_limits
+
+        self._console_print(fetch_apistore_limits(), markup=False)
 
     def _usage_reset(self, force: bool = False):
         """`/usage reset [--force]` — redeem one banked Codex reset credit."""

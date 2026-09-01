@@ -11090,11 +11090,39 @@ def _finalize_superseded_runtimes(stale: list[tuple[str, dict]]) -> None:
             logger.exception(
                 "superseded runtime teardown failed sid=%s", old_sid
             )
+def _desktop_agent_prewarm_enabled() -> bool:
+    """Decide whether Desktop sessions should pre-warm their agent.
+
+    Agent construction is deliberately deferred off the ``session.resume``
+    response path, but it still runs in a Python thread.  On Desktop that
+    thread can perform large prompt/tool/skill assembly while competing for the
+    process GIL, starving the WebSocket event loop and making a later
+    ``session.resume`` look like a dead backend.  Desktop can build on the
+    first real prompt instead, when the session is already open and the UI can
+    show a starting state.
+
+    Keep the historical pre-warm behavior for CLI/TUI callers.  Operators can
+    explicitly opt Desktop back in with ``HERMES_TUI_PREWARM_AGENT=1``.
+    """
+    configured = os.environ.get("HERMES_TUI_PREWARM_AGENT")
+    if configured is not None:
+        return is_truthy_value(configured)
+    return os.environ.get("HERMES_DESKTOP") != "1"
 
 
 def _schedule_agent_build(sid: str, delay: float = 0.05) -> None:
-    """Pre-warm a deferred session's agent off the response path (session.create
-    and cold resume both build through here; _sess() also builds on demand)."""
+    """Pre-warm a deferred session's agent off the response path.
+
+    Desktop deliberately skips this pre-warm by default: ``_sess()`` still
+    starts the same build on first use, but opening/resuming a chat no longer
+    competes with that build for the WebSocket event loop's GIL.
+    """
+    if not _desktop_agent_prewarm_enabled():
+        logger.info(
+            "Desktop agent pre-warm skipped for session=%s; build on first use",
+            sid,
+        )
+        return
 
     def _run():
         session = _sessions.get(sid)

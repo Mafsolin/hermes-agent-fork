@@ -6,7 +6,7 @@ import threading
 import time
 import zipfile
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -713,6 +713,29 @@ def test_tool_search_sorts_by_raw_score_across_buckets():
     ]
     assert [entry["score"] for entry in result["results"]] == [0.9, 0.9, 0.9]
     assert result["total"] == 3
+
+
+def test_tool_search_retries_deep_search_without_session_context_on_failure():
+    provider = OpenVikingMemoryProvider()
+    provider._client = MagicMock()
+    provider._session_id = "session-123"
+    provider._client.post.side_effect = [
+        RuntimeError("INTERNAL: Internal server error"),
+        {"result": {"memories": [], "resources": [], "skills": [], "total": 0}},
+    ]
+
+    result = json.loads(provider._tool_search({"query": "connect facts", "mode": "deep"}))
+
+    assert provider._client.post.call_args_list == [
+        call("/api/v1/search/search", {
+            "query": "connect facts",
+            "session_id": "session-123",
+        }),
+        call("/api/v1/search/search", {
+            "query": "connect facts",
+        }),
+    ]
+    assert result == {"results": [], "total": 0}
 
 
 def test_tool_add_resource_rejects_hermes_credential_file_upload(tmp_path, monkeypatch):

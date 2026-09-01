@@ -18556,7 +18556,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
           3. Catch-all busy-reject text. Rejecting is required rather than
              falling through to interrupt + discard: commands like /model,
              /reasoning, /voice, /insights, /title, /resume, /retry,
-             /undo, /compress, /usage, /reload-mcp, /sethome, /reset (all
+             /undo, /compress, /tokens, /usage, /reload-mcp, /sethome, /reset (all
              registered as Discord slash commands) would interrupt the
              agent AND get silently discarded by the slash-command safety
              net, producing a zero-char response. See #5057, #6252, #10370.
@@ -19964,8 +19964,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if canonical == "compress":
             return await self._handle_compress_command(event)
 
-        if canonical == "usage":
-            return await self._handle_usage_command(event)
+        if canonical == "tokens":
+            return await self._handle_tokens_command(event)
+
+        if canonical == "limits":
+            return await self._handle_limits_command(event)
 
         if canonical == "topup":
             return await self._handle_topup_command(event)
@@ -26817,6 +26820,34 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if profile and metadata is not None:
             metadata = dict(metadata)
             metadata["hermes_profile"] = profile
+        business_connection_id = getattr(source, "business_connection_id", None)
+        if business_connection_id:
+            metadata = dict(metadata or {})
+            metadata["business_connection_id"] = str(business_connection_id)
+        return metadata
+
+    @staticmethod
+    def _reply_metadata_for_source(
+        source,
+        thread_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return the minimal reply metadata for a persisted source.
+
+        This compatibility helper is intentionally independent of a runner
+        instance so delivery code and older downstream integrations can build
+        a Telegram Business reply envelope from a ``SessionSource`` alone.
+        """
+        effective_thread_id = (
+            getattr(source, "thread_id", None)
+            if thread_id is None
+            else thread_id
+        )
+        metadata: Dict[str, Any] = {}
+        if effective_thread_id is not None:
+            metadata["thread_id"] = str(effective_thread_id)
+        business_connection_id = getattr(source, "business_connection_id", None)
+        if business_connection_id:
+            metadata["business_connection_id"] = str(business_connection_id)
         return metadata
 
     def _thread_metadata_for_target(

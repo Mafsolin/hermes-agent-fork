@@ -4450,19 +4450,34 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
         blocked_patterns = [
             "access denied", "access to this page has been denied",
             "blocked", "bot detected", "verification required",
-            "please verify", "are you a robot", "captcha",
+            "please verify", "are you a robot", "not a robot", "captcha",
             "cloudflare", "ddos protection", "checking your browser",
             "just a moment", "attention required"
         ]
         title_lower = title.lower()
+        final_url_lower = str(final_url or "").lower()
+        bot_detection_detected = any(pattern in title_lower for pattern in blocked_patterns)
+        bot_detection_detected = bot_detection_detected or any(
+            pattern in final_url_lower
+            for pattern in ("captcha", "challenge", "verify", "showcaptcha")
+        )
 
-        if any(pattern in title_lower for pattern in blocked_patterns):
+        if bot_detection_detected:
             response["bot_detection_warning"] = (
                 f"Page title '{title}' suggests bot detection. The site may have blocked this request. "
                 "Options: 1) Try adding delays between actions, 2) Access different pages first, "
                 "3) Enable advanced stealth (BROWSERBASE_ADVANCED_STEALTH=true, requires Scale plan), "
                 "4) Some sites have very aggressive bot detection that may be unavoidable."
             )
+            response["manual_verification"] = {
+                "available": False,
+                "same_session_required": True,
+                "reason": (
+                    "Manual verification is not available through an unrelated Ozon link. "
+                    "If the site offers a legitimate challenge, complete it in this same "
+                    "browser session; do not use Ozon as a workaround."
+                ),
+            }
 
         # Include feature info on first navigation so model knows what's active
         if is_first_nav and "features" in session_info:

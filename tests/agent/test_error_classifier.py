@@ -560,6 +560,37 @@ class TestClassifyApiError:
 
 
 
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Structurally heavy chat request capacity is busy; retry shortly.",
+            "Chat admission capacity is temporarily unavailable (reason: structure_limit)",
+        ],
+    )
+    def test_503_structure_limit_routes_to_compression(self, message):
+        """Mafsolin's admission guard rejects request structure, not service load.
+
+        Retrying the identical payload cannot recover.  Route the request through
+        context compression before retrying, while ordinary 503 responses remain
+        classified as transient overloads.
+        """
+        e = MockAPIError(
+            message,
+            status_code=503,
+            body={
+                "error": {
+                    "message": message,
+                    "type": "server_error",
+                    "code": "chat_admission_busy",
+                    "reason": "structure_limit",
+                }
+            },
+        )
+        result = classify_api_error(e, provider="custom:mafsolin")
+        assert result.reason == FailoverReason.context_overflow
+        assert result.should_compress is True
+        assert result.retryable is True
+
     # ── Model not found ──
 
     def test_404_model_not_found(self):

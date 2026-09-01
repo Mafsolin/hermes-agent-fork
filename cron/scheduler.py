@@ -3240,7 +3240,13 @@ def _deliver_result(
             f"To stop or manage this job, send me a new message (e.g. \"stop reminder {task_name}\")."
         )
     else:
-        delivery_content = content
+        clean_content = str(content or "").strip()
+        if clean_content.startswith("\u23f0"):
+            delivery_content = clean_content
+        elif clean_content:
+            delivery_content = f"\u23f0 {clean_content}"
+        else:
+            delivery_content = "\u23f0"
 
     # Extract MEDIA: tags so attachments are forwarded as files, not raw text
     from gateway.platforms.base import BasePlatformAdapter

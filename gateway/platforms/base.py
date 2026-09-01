@@ -151,6 +151,9 @@ def _thread_metadata_for_source(source, reply_to_message_id: str | None = None) 
         scope_id = getattr(source, "scope_id", None)
         if scope_id:
             metadata["slack_team_id"] = str(scope_id)
+    business_connection_id = getattr(source, "business_connection_id", None)
+    if business_connection_id:
+        metadata["business_connection_id"] = str(business_connection_id)
     if not metadata:
         return None
     if _platform_name(getattr(source, "platform", None)) == "telegram" and getattr(source, "chat_type", None) == "dm":
@@ -7495,6 +7498,7 @@ class BasePlatformAdapter(ABC):
         role_authorized: bool = False,
         auto_thread_created: bool = False,
         auto_thread_initial_name: Optional[str] = None,
+        business_connection_id: Optional[str] = None,
     ) -> SessionSource:
         """Helper to build a SessionSource for this platform.
 
@@ -7525,6 +7529,11 @@ class BasePlatformAdapter(ABC):
                         user_id=str(user_id) if user_id else None,
                         user_name=user_name,
                         thread_id=str(thread_id) if thread_id else None,
+                        business_connection_id=(
+                            str(business_connection_id)
+                            if business_connection_id
+                            else None
+                        ),
                         chat_topic=chat_topic.strip() if chat_topic else None,
                         user_id_alt=user_id_alt,
                         chat_id_alt=chat_id_alt,
@@ -7551,6 +7560,9 @@ class BasePlatformAdapter(ABC):
             user_id=str(user_id) if user_id else None,
             user_name=user_name,
             thread_id=str(thread_id) if thread_id else None,
+            business_connection_id=(
+                str(business_connection_id) if business_connection_id else None
+            ),
             chat_topic=chat_topic.strip() if chat_topic else None,
             user_id_alt=user_id_alt,
             chat_id_alt=chat_id_alt,
