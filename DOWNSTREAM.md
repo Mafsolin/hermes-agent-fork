@@ -55,6 +55,43 @@ python -m obsidian_telegram_bridge process --no-llm
 Команду запускайте под владельцем профиля и указывайте конкретный vault; не
 кладите токены в Git.
 
+## Провайдеры ModelHub и Mafsolin
+
+Рабочий overlay профиля сохранён в
+`runtime/afsol-provider-config.example.yaml`. Он использует нативный для
+Afsol формат `custom_providers` и содержит:
+
+- `ModelHub` — `https://modelhub.my/v1`, ключ из `MODELHUB_API_KEY`,
+  10 моделей, default `claude-sonnet-5`;
+- `Mafsolin` — `https://api.mafsolin.space/v1`, ключ из
+  `MAFSOLIN_SEARCH_API_KEY`, 10 моделей, default
+  `antigravity/claude-sonnet-4-6`.
+
+В конфиге намеренно оставлено `discover_models: false`: список моделей —
+явный allowlist, чтобы автоматический каталог провайдера не изменил поведение
+после обновления Hermes. Все реальные ключи остаются в
+`/home/afsol/.hermes/.env`; в Git хранятся только ссылки `${...}`.
+
+При контрольной проверке 2026-09-01 оба endpoint-а вернули `200` на
+авторизованный `/v1/models`. Из старого live-списка ModelHub исключены три ID,
+которые API больше не возвращает: `deepseek-v4-flash`, `deepseek-v4-pro` и
+`grok-4-5`. Доступные дополнительные модели не добавлялись автоматически —
+это позволяет сначала проверить их отдельно и затем осознанно расширить
+allowlist.
+
+Для восстановления на новом профиле сначала сделайте копию конфига, затем
+объедините только нужные верхнеуровневые ключи из overlay с локальным
+`config.yaml`; не копируйте файл поверх полного профиля. После этого проверьте:
+
+```bash
+runuser -u afsol -- env HERMES_HOME=/home/afsol/.hermes \
+  /home/afsol/hermes-agent/venv/bin/hermes config check
+```
+
+При обновлении upstream overlay не нужно переписывать: он хранится отдельным
+файлом и должен проходить review вместе с изменениями списка моделей. Если
+ключ ротируется, меняется только `.env`, а не Git-файл.
+
 ## Обновление upstream
 
 Запускать из чистой ветки `main`:
