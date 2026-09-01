@@ -69,6 +69,9 @@ Afsol формат `custom_providers` и содержит:
 - Router Hermes / Router AI для vision —
   `https://routerai.ru/api/v1`, модель `google/gemini-3.1-flash-lite`, ключ
   `ROUTER_HERMES_API_KEY`;
+- Mafsolin Search для `web_search` — отдельный MCP-сервер `mcp_servers.search`,
+  ключ `MAFSOLIN_SEARCH_API_KEY`; это не `web.search_backend` и не LLM-модель
+  провайдера Mafsolin;
 - `ModelHub` — `https://modelhub.my/v1`, ключ из `MODELHUB_API_KEY`,
   10 моделей, default `claude-sonnet-5`;
 - `Mafsolin` — `https://api.mafsolin.space/v1`, ключ из
@@ -80,6 +83,15 @@ Afsol формат `custom_providers` и содержит:
 каталог провайдера не изменил поведение после обновления Hermes. Все реальные
 ключи остаются в `/home/afsol/.hermes/.env`; в Git хранятся только ссылки
 `${...}`.
+
+MCP-сервер поиска запускается из `/home/afsol/.hermes/mcp/search-mcp-server.py`
+и передаёт в него `MAFSOLIN_SEARCH_API_KEY`. Если в профиле включён toolset
+`mcp-search`, инструмент `web_search` будет доступен агенту через этот сервер.
+В overlay этот toolset уже указан рядом с `hermes-cli`.
+
+Прямая проверка MCP-вызова 2026-09-01: инструмент `web_search` найден, запрос
+вернул `ok=true`, 3 результата; Mafsolin внутри выполнил failover
+`linkup-search` → `tavily-search`.
 
 При контрольной проверке 2026-09-01 оба endpoint-а вернули `200` на
 авторизованный `/v1/models`. Из старого live-списка ModelHub исключены три ID,

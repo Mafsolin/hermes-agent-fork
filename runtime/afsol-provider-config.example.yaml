@@ -29,11 +29,28 @@ auxiliary:
     timeout: 120
     download_timeout: 30
 
-web:
-  # The built-in Hermes web_search tool uses the separate Mafsolin Search MCP
-  # router; this is not the same as the LLM provider named Mafsolin below.
-  # The MCP server reads MAFSOLIN_SEARCH_API_KEY from the profile .env.
-  search_backend: "mcp"
+mcp_servers:
+  # Mafsolin Search is exposed to Hermes as an MCP tool, not as a built-in
+  # web backend. The server reads the key from this profile-scoped env.
+  search:
+    command: "/home/afsol/hermes-agent/venv/bin/python"
+    args:
+      - "/home/afsol/.hermes/mcp/search-mcp-server.py"
+    env:
+      MAFSOLIN_SEARCH_API_KEY: "${MAFSOLIN_SEARCH_API_KEY}"
+    connect_timeout: 30
+    timeout: 90
+    sampling:
+      enabled: false
+    tools:
+      include:
+        - "web_search"
+      prompts: false
+      resources: false
+
+toolsets:
+  - "hermes-cli"
+  - "mcp-search"
 
 custom_providers:
   - name: "Router Hermes"
