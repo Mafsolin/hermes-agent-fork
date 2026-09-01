@@ -55,22 +55,31 @@ python -m obsidian_telegram_bridge process --no-llm
 Команду запускайте под владельцем профиля и указывайте конкретный vault; не
 кладите токены в Git.
 
-## Провайдеры ModelHub и Mafsolin
+## Браузер, STT и провайдеры ModelHub/Mafsolin/Router AI
 
 Рабочий overlay профиля сохранён в
 `runtime/afsol-provider-config.example.yaml`. Он использует нативный для
 Afsol формат `custom_providers` и содержит:
 
+- Camofox как явный browser backend (`browser.cloud_provider: camofox`) с
+  включённым `managed_persistence`. Адрес Camofox задаётся только в
+  `CAMOFOX_URL` в `.env`;
+- Groq для голосовых сообщений (`stt.provider: groq`) с моделью
+  `whisper-large-v3-turbo`, ключ `GROQ_API_KEY`;
+- Router Hermes / Router AI для vision —
+  `https://routerai.ru/api/v1`, модель `google/gemini-3.1-flash-lite`, ключ
+  `ROUTER_HERMES_API_KEY`;
 - `ModelHub` — `https://modelhub.my/v1`, ключ из `MODELHUB_API_KEY`,
   10 моделей, default `claude-sonnet-5`;
 - `Mafsolin` — `https://api.mafsolin.space/v1`, ключ из
   `MAFSOLIN_SEARCH_API_KEY`, 9 моделей, default
   `antigravity/gemini-3.6-flash-high`.
 
-В конфиге намеренно оставлено `discover_models: false`: список моделей —
-явный allowlist, чтобы автоматический каталог провайдера не изменил поведение
-после обновления Hermes. Все реальные ключи остаются в
-`/home/afsol/.hermes/.env`; в Git хранятся только ссылки `${...}`.
+У Router Hermes, ModelHub и Mafsolin намеренно оставлено
+`discover_models: false`: списки моделей — явные allowlist, чтобы автоматический
+каталог провайдера не изменил поведение после обновления Hermes. Все реальные
+ключи остаются в `/home/afsol/.hermes/.env`; в Git хранятся только ссылки
+`${...}`.
 
 При контрольной проверке 2026-09-01 оба endpoint-а вернули `200` на
 авторизованный `/v1/models`. Из старого live-списка ModelHub исключены три ID,
@@ -80,6 +89,12 @@ Afsol формат `custom_providers` и содержит:
 проверок: endpoint её больше не возвращает. Доступные дополнительные модели
 не добавлялись автоматически — это позволяет сначала проверить их отдельно и
 затем осознанно расширить allowlist.
+
+Для Camofox перед запуском проверьте доступность адреса из `CAMOFOX_URL` и
+выполните `/browser status`: одна только запись `cloud_provider` не запускает
+сам Camofox-сервис. На старом сервере текущий Camofox отвечает `200` на
+`/health` и `/tabs`; для отдельного нового VPS его адрес должен быть локальным
+для того VPS либо сетево доступным ему.
 
 Для восстановления на новом профиле сначала сделайте копию конфига, затем
 объедините только нужные верхнеуровневые ключи из overlay с локальным

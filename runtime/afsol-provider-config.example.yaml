@@ -7,7 +7,52 @@
 # Models are an explicit, last-verified allowlist. discover_models is disabled
 # so an upstream/provider catalog refresh cannot silently change routing.
 
+browser:
+  # Explicitly select the anti-detection Firefox/Camoufox backend.
+  # The Camofox server address is supplied by CAMOFOX_URL in .env.
+  cloud_provider: "camofox"
+  camofox:
+    managed_persistence: true
+
+stt:
+  enabled: true
+  provider: "groq"
+  groq:
+    model: "whisper-large-v3-turbo"
+
+auxiliary:
+  vision:
+    provider: "custom"
+    model: "google/gemini-3.1-flash-lite"
+    base_url: "https://routerai.ru/api/v1"
+    api_key: "${ROUTER_HERMES_API_KEY}"
+    timeout: 120
+    download_timeout: 30
+
+web:
+  # The built-in Hermes web_search tool uses the separate Mafsolin Search MCP
+  # router; this is not the same as the LLM provider named Mafsolin below.
+  # The MCP server reads MAFSOLIN_SEARCH_API_KEY from the profile .env.
+  search_backend: "mcp"
+
 custom_providers:
+  - name: "Router Hermes"
+    base_url: "https://routerai.ru/api/v1"
+    api_mode: "chat_completions"
+    api_key: "${ROUTER_HERMES_API_KEY}"
+    model: "google/gemini-3.1-flash-lite"
+    discover_models: false
+    models:
+      google/gemini-3.1-flash-lite:
+        name: "google/gemini-3.1-flash-lite"
+        context_length: 262000
+      deepseek/deepseek-v4-flash:
+        name: "deepseek/deepseek-v4-flash"
+        context_length: 262000
+      poolside/laguna-xs-2.1:
+        name: "poolside/laguna-xs-2.1"
+        context_length: 262000
+
   - name: "ModelHub"
     base_url: "https://modelhub.my/v1"
     api_mode: "chat_completions"
