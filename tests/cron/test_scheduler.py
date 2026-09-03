@@ -448,7 +448,7 @@ class TestDeliverResultWrapping:
         assert result is None
         relay.send_for_platform.assert_awaited_once()
         args = relay.send_for_platform.await_args.args
-        assert args[:3] == (Platform.SLACK, "D123", "scheduled result")
+        assert args[:3] == (Platform.SLACK, "D123", "\u23f0 scheduled result")
         assert relay.send_for_platform.await_args.kwargs["metadata"]["user_id"] == "U123"
         relay.send_voice.assert_awaited_once()
         media_metadata = relay.send_voice.await_args.kwargs["metadata"]
