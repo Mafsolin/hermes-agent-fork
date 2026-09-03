@@ -3240,7 +3240,18 @@ def _deliver_result(
             f"To stop or manage this job, send me a new message (e.g. \"stop reminder {task_name}\")."
         )
     else:
-        delivery_content = content
+        clean_content = str(content or "").strip()
+        if not clean_content:
+            # Preserve the fail-closed empty-payload guard downstream
+            # (search for cleaned_delivery_content.strip() below): a bare
+            # clock emoji is still "content" from that guard's point of
+            # view, so a genuinely empty cron result must stay empty here,
+            # not get silently upgraded into a deliverable message.
+            delivery_content = ""
+        elif clean_content.startswith("\u23f0"):
+            delivery_content = clean_content
+        else:
+            delivery_content = f"\u23f0 {clean_content}"
 
     # Extract MEDIA: tags so attachments are forwarded as files, not raw text
     from gateway.platforms.base import BasePlatformAdapter

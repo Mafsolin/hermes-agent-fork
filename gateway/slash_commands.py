@@ -5752,6 +5752,16 @@ class GatewaySlashCommandsMixin:
         except Exception:
             return []
 
+    async def _handle_tokens_command(self, event: MessageEvent) -> str:
+        """Compatibility entry point for the canonical `/tokens` command."""
+        return await self._handle_usage_command(event)
+
+    async def _handle_limits_command(self, event: MessageEvent) -> str:
+        """Show external API-store limits for the configured provider keys."""
+        from agent.apistore_limits import fetch_apistore_limits
+
+        return await asyncio.to_thread(fetch_apistore_limits)
+
     async def _handle_usage_command(self, event: MessageEvent) -> str:
         """Handle /usage command -- show token usage for the current session.
 

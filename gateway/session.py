@@ -227,6 +227,11 @@ class SessionSource:
     # forge it across the wire or have it restored from persistence.
     delivered_via_upstream_relay: bool = False
 
+    # Telegram Business API connection used to send a reply on behalf of the
+    # connected business account. Appended to preserve positional construction
+    # compatibility for all pre-existing source fields.
+    business_connection_id: Optional[str] = None
+
     def __post_init__(self) -> None:
         # D-Q2.5 dual-field reconciliation: `scope_id` is canonical, `guild_id`
         # is the deprecated alias. Mirror whichever was provided onto the other
@@ -269,6 +274,8 @@ class SessionSource:
             "thread_id": self.thread_id,
             "chat_topic": self.chat_topic,
         }
+        if self.business_connection_id:
+            d["business_connection_id"] = self.business_connection_id
         if self.user_id_alt:
             d["user_id_alt"] = self.user_id_alt
         if self.chat_id_alt:
@@ -305,6 +312,7 @@ class SessionSource:
             user_id=data.get("user_id"),
             user_name=data.get("user_name"),
             thread_id=data.get("thread_id"),
+            business_connection_id=data.get("business_connection_id"),
             chat_topic=data.get("chat_topic"),
             user_id_alt=data.get("user_id_alt"),
             chat_id_alt=data.get("chat_id_alt"),

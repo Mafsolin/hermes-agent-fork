@@ -758,7 +758,104 @@ def build_status_phrase(tool_name: str, args: dict | None, max_len: int = 49) ->
         phrase = phrase + "…"
     return phrase
 
+def _short_status_detail(tool_name: str, args: dict | None) -> str:
+    """Return one tiny identifying bit for compact chat tool progress."""
+    if not isinstance(args, dict):
+        args = {}
 
+    def compact(value, limit: int = 24) -> str:
+        text = _oneline(str(value or "")).strip()
+        if not text:
+            return ""
+        if len(text) > limit:
+            text = text[:limit - 3].rstrip() + "..."
+        return text
+
+    if tool_name == "terminal":
+        command = compact(summarize_shell_command(str(args.get("command") or "")), 22)
+        return command.split()[0] if command else ""
+
+    if tool_name == "execute_code":
+        return compact(args.get("language") or args.get("kind") or "", 18)
+
+    if tool_name in {"skill_view", "skill_manage"}:
+        name = args.get("name") or args.get("file_path") or args.get("path")
+        if name:
+            return compact(str(name).replace("\\", "/").rstrip("/").split("/")[-1], 24)
+        return ""
+
+    if tool_name == "cronjob":
+        name = args.get("name") or args.get("job_id")
+        if not name and args.get("prompt"):
+            prompt = str(args.get("prompt") or "")
+            if "\u00ab" in prompt and "\u00bb" in prompt:
+                name = prompt.split("\u00ab", 1)[1].split("\u00bb", 1)[0]
+            else:
+                name = prompt
+        name = name or args.get("action")
+        if isinstance(name, str):
+            for prefix in ("\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435:", "reminder:"):
+                if name.lower().startswith(prefix.lower()):
+                    name = name.split(":", 1)[1].strip()
+                    break
+        return compact(name, 24)
+
+    if tool_name.startswith("mcp__") or tool_name.startswith("mcp_"):
+        rest = tool_name[5:] if tool_name.startswith("mcp__") else tool_name[4:]
+        parts = [p for p in rest.split("_") if p]
+        if len(parts) >= 2:
+            return compact("_".join(parts[:2]), 24)
+        return compact(rest, 24)
+
+    if tool_name in {"web_search", "search_files"}:
+        return compact(args.get("query") or args.get("pattern"), 24)
+
+    if tool_name in {"read_file", "write_file", "patch"}:
+        raw = args.get("path") or args.get("file") or args.get("filepath")
+        if raw:
+            return compact(Path(str(raw).replace("\\", "/")).name, 24)
+        return ""
+
+    for key in ("name", "query", "text", "path", "prompt", "goal", "action"):
+        if key in args:
+            return compact(args.get(key), 24)
+    return ""
+
+
+def build_short_tool_status(tool_name: str, args: dict | None = None) -> str:
+    """Return a compact status for chat tool-progress bubbles."""
+    labels = {
+        "terminal": "\u041a\u043e\u043c\u0430\u043d\u0434\u0430",
+        "execute_code": "\u041a\u043e\u0434",
+        "skill_view": "\u041d\u0430\u0432\u044b\u043a",
+        "skills_list": "\u041d\u0430\u0432\u044b\u043a\u0438",
+        "skill_manage": "\u041d\u0430\u0432\u044b\u043a",
+        "cronjob": "\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435",
+        "web_search": "\u041f\u043e\u0438\u0441\u043a",
+        "web_extract": "\u0427\u0442\u0435\u043d\u0438\u0435",
+        "browser_navigate": "\u0411\u0440\u0430\u0443\u0437\u0435\u0440",
+        "browser_click": "\u041a\u043b\u0438\u043a",
+        "browser_type": "\u0412\u0432\u043e\u0434",
+        "read_file": "\u0424\u0430\u0439\u043b",
+        "write_file": "\u0417\u0430\u043f\u0438\u0441\u044c",
+        "patch": "\u041f\u0440\u0430\u0432\u043a\u0430",
+        "search_files": "\u041f\u043e\u0438\u0441\u043a",
+        "image_generate": "\u041a\u0430\u0440\u0442\u0438\u043d\u043a\u0430",
+        "video_generate": "\u0412\u0438\u0434\u0435\u043e",
+        "text_to_speech": "\u041e\u0437\u0432\u0443\u0447\u043a\u0430",
+        "vision_analyze": "\u041a\u0430\u0440\u0442\u0438\u043d\u043a\u0430",
+        "session_search": "\u041f\u0430\u043c\u044f\u0442\u044c",
+        "memory": "\u041f\u0430\u043c\u044f\u0442\u044c",
+        "todo": "\u0417\u0430\u0434\u0430\u0447\u0438",
+        "delegate_task": "\u041f\u043e\u0434\u0437\u0430\u0434\u0430\u0447\u0430",
+        "clarify": "\u0412\u043e\u043f\u0440\u043e\u0441",
+        "send_message": "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435",
+    }
+    label = labels.get(tool_name)
+    if label is None:
+        label = "MCP" if tool_name.startswith(("mcp_", "mcp__")) else "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435"
+    detail = _short_status_detail(tool_name, args)
+    return f"{label} {detail}".strip()
 def build_tool_label(tool_name: str, args: dict, max_len: int | None = None) -> str | None:
     """Build a human-phrased status label for a tool call.
 

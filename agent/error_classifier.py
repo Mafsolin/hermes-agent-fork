@@ -1000,6 +1000,21 @@ def classify_api_error(
             should_compress=True,
         )
 
+    # Mafsolin/OpenAI-compatible admission control can reject a request whose
+    # message/tool structure is too heavy even though it is below the model's
+    # advertised token window.  The endpoint reports this as HTTP 503 with
+    # ``reason=structure_limit`` (or the equivalent human-readable phrase).
+    # Retrying the identical payload is deterministic; compact it first.
+    if (
+        "structure_limit" in error_msg
+        or "structurally heavy chat request capacity" in error_msg
+    ):
+        return _result(
+            FailoverReason.context_overflow,
+            retryable=True,
+            should_compress=True,
+        )
+
     # Anthropic OAuth subscription rejects the 1M-context beta header.
     # Observed error body: "The long context beta is not yet available for
     # this subscription." Returned as HTTP 400 from native Anthropic when
