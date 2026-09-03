@@ -14,9 +14,8 @@ Afsol. Официальная репа подключена как `upstream`, �
 
 ## Сохранённые Afsol-особенности
 
-В downstream перенесены лимиты провайдеров, Obsidian Telegram Bridge,
-idempotent Telegram publishing, OpenViking session-search fallback и проверки
-ошибок. Для cron сохранена выдача с префиксом `⏰`. Чтобы старое поведение
+В downstream перенесены лимиты провайдеров и проверки ошибок. Для cron
+сохранена выдача с префиксом `⏰`. Чтобы старое поведение
 непривязанных задач продолжало следовать активной глобальной модели, в профиле
 Afsol перед запуском этой ветки нужно явно оставить:
 
@@ -27,33 +26,6 @@ cron:
 
 Если параметр не задан, актуальный upstream по умолчанию использует защиту от
 непреднамеренной смены платного provider/model и останавливает drifted-задачу.
-
-Для Telegram Business → Obsidian используются те же изолированные секреты и
-пути профиля. В `config.yaml` включение выглядит так:
-
-```yaml
-platforms:
-  telegram:
-    extra:
-      business_memory_enabled: true
-      business_owner_ids: ["<owner_id>"]
-      business_auto_reply_enabled: false
-```
-
-Путь к vault и SQLite-буферу задаются только в окружении сервиса (или в его
-локальном `.env`), например `OBSIDIAN_VAULT_PATH` и
-`OBSIDIAN_BRIDGE_DB`. Автоответ Business выключен по умолчанию; если он нужен,
-включайте его вместе с явным `business_auto_reply_user_ids`. Обработчик
-пишет только текстовые Business-сообщения, помечает удаления и передаёт
-`business_connection_id` в Telegram API, чтобы ответы не ушли из нужного
-Business-чата. Обработать накопившиеся факты в Obsidian можно так:
-
-```bash
-python -m obsidian_telegram_bridge process --no-llm
-```
-
-Команду запускайте под владельцем профиля и указывайте конкретный vault; не
-кладите токены в Git.
 
 ## Браузер, STT и провайдеры ModelHub/Mafsolin/Router AI
 

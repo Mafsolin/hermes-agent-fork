@@ -703,9 +703,6 @@ class TelegramAdapter(BasePlatformAdapter):
         self._app: Optional[Application] = None
         self._bot: Optional[Bot] = None
         self._webhook_mode: bool = False
-        self._business_memory_store = self._initialize_business_memory()
-        self._business_owner_ids_override = None
-        self._business_auto_reply_user_ids_override = None
         self._mention_patterns = self._compile_mention_patterns()
         self._reply_to_mode: str = getattr(config, 'reply_to_mode', 'first') or 'first'
         self._disable_link_previews: bool = self._coerce_bool_extra("disable_link_previews", False)
@@ -1570,22 +1567,6 @@ class TelegramAdapter(BasePlatformAdapter):
         return str(thread_id) if thread_id is not None else None
 
     @classmethod
-    def _metadata_business_connection_id(
-        cls, metadata: Optional[Dict[str, Any]]
-    ) -> Optional[str]:
-        if not metadata:
-            return None
-        value = metadata.get("business_connection_id")
-        return str(value).strip() if value is not None and str(value).strip() else None
-
-    @classmethod
-    def _business_connection_kwargs(
-        cls, metadata: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        value = cls._metadata_business_connection_id(metadata)
-        return {"business_connection_id": value} if value else {}
-
-    @classmethod
     def _metadata_direct_messages_topic_id(cls, metadata: Optional[Dict[str, Any]]) -> Optional[str]:
         if not metadata:
             return None
@@ -1666,13 +1647,9 @@ class TelegramAdapter(BasePlatformAdapter):
         DM topic fallback sends while preserving the ``message_thread_id`` so
         the message still lands in the correct topic.
         """
-        business_kwargs = cls._business_connection_kwargs(metadata)
         if metadata and metadata.get("telegram_dm_topic_reply_fallback"):
             if reply_to_mode == "off":
-                return {
-                    "message_thread_id": cls._message_thread_id_for_send(thread_id),
-                    **business_kwargs,
-                }
+                return {"message_thread_id": cls._message_thread_id_for_send(thread_id)}
             if reply_to_message_id is None:
                 reply_to_message_id = cls._metadata_reply_to_message_id(metadata)
             if reply_to_message_id is None:
@@ -1684,30 +1661,22 @@ class TelegramAdapter(BasePlatformAdapter):
                 # runs in.
                 thread_message_id = cls._message_thread_id_for_send(thread_id)
                 if thread_message_id is not None:
-                    return {"message_thread_id": thread_message_id, **business_kwargs}
+                    return {"message_thread_id": thread_message_id}
                 direct_topic_id = cls._metadata_direct_messages_topic_id(metadata)
                 if direct_topic_id is not None:
                     return {
                         "message_thread_id": None,
                         "direct_messages_topic_id": int(direct_topic_id),
-                        **business_kwargs,
                     }
-                return dict(business_kwargs)
-            return {
-                "message_thread_id": cls._message_thread_id_for_send(thread_id),
-                **business_kwargs,
-            }
+                return {}
+            return {"message_thread_id": cls._message_thread_id_for_send(thread_id)}
         direct_topic_id = cls._metadata_direct_messages_topic_id(metadata)
         if direct_topic_id is not None:
             return {
                 "message_thread_id": None,
                 "direct_messages_topic_id": int(direct_topic_id),
-                **business_kwargs,
             }
-        return {
-            "message_thread_id": cls._message_thread_id_for_send(thread_id),
-            **business_kwargs,
-        }
+        return {"message_thread_id": cls._message_thread_id_for_send(thread_id)}
 
     def _thread_kwargs_for_draft(
         self,
@@ -1732,11 +1701,6 @@ class TelegramAdapter(BasePlatformAdapter):
             reply_to_message_id=reply_to_id,
             reply_to_mode=getattr(self, "_reply_to_mode", None),
         )
-        # Telegram's draft endpoints do not accept Business API's
-        # ``business_connection_id`` parameter. Business replies use the
-        # regular send/edit methods; draft streaming falls back to the normal
-        # non-business path if ever requested for such an event.
-        kwargs.pop("business_connection_id", None)
         return {k: v for k, v in kwargs.items() if v is not None}
 
     @classmethod
@@ -2457,7 +2421,6 @@ class TelegramAdapter(BasePlatformAdapter):
             "message_id": int(message_id),
             "rich_message": self._rich_message_payload(content),
         }
-        payload.update(self._business_connection_kwargs(metadata))
         # Edits target an existing message by chat_id + message_id. Topic
         # routing belongs only on send endpoints; forwarding message_thread_id
         # or direct_messages_topic_id makes Telegram reject this rich edit and
@@ -4356,250 +4319,6 @@ class TelegramAdapter(BasePlatformAdapter):
             if self._post_connect_task is asyncio.current_task():
                 self._post_connect_task = None
 
-    @staticmethod
-    def _business_id_set(raw: Any) -> set[str]:
-        """Normalize a comma-separated/list Telegram ID setting."""
-        if raw is None:
-            return set()
-        if isinstance(raw, (list, tuple, set, frozenset)):
-            values = raw
-        else:
-            values = str(raw).split(",")
-        return {str(value).strip() for value in values if str(value).strip()}
-
-    def _business_extra(self) -> Dict[str, Any]:
-        config = getattr(self, "config", None)
-        extra = getattr(config, "extra", {}) if config is not None else {}
-        return extra if isinstance(extra, dict) else {}
-
-    def _business_auto_reply_enabled(self) -> bool:
-        configured = self._business_extra().get("business_auto_reply_enabled")
-        if configured is None:
-            configured = os.getenv("TELEGRAM_BUSINESS_AUTO_REPLY_ENABLED", "")
-        return str(configured).strip().lower() in {"1", "true", "yes", "on"}
-
-    def _business_owner_ids(self) -> set[str]:
-        override = getattr(self, "_business_owner_ids_override", None)
-        if override is not None:
-            return self._business_id_set(override)
-        extra = self._business_extra()
-        raw = extra.get("business_owner_ids")
-        if raw is None:
-            raw = os.getenv("TELEGRAM_BUSINESS_OWNER_IDS", "")
-        return self._business_id_set(raw)
-
-    def _business_auto_reply_user_ids(self) -> set[str]:
-        override = getattr(self, "_business_auto_reply_user_ids_override", None)
-        if override is not None:
-            return self._business_id_set(override)
-        raw = self._business_extra().get("business_auto_reply_user_ids")
-        if raw is None:
-            raw = os.getenv("TELEGRAM_BUSINESS_AUTO_REPLY_USER_IDS", "")
-        return self._business_id_set(raw)
-
-    def _business_updates_enabled(self) -> bool:
-        configured_memory = self._business_extra().get("business_memory_enabled")
-        memory_enabled = str(configured_memory).strip().lower() in {
-            "1", "true", "yes", "on"
-        }
-        return bool(
-            getattr(self, "_business_memory_store", None) is not None
-            or memory_enabled
-            or self._business_auto_reply_enabled()
-        )
-
-    def _initialize_business_memory(self):
-        """Create the optional Business-message buffer when explicitly enabled.
-
-        A normal Telegram adapter must not create an Obsidian vault or SQLite
-        file merely because it was imported. The bridge is enabled by an
-        explicit platform setting or by one of its dedicated environment
-        paths; auto-reply alone remains sufficient to receive Business
-        updates, but does not create a memory database.
-        """
-        extra = self._business_extra()
-        enabled = extra.get("business_memory_enabled")
-        if enabled is None:
-            enabled = bool(
-                os.getenv("OBSIDIAN_BRIDGE_DB", "").strip()
-                or os.getenv("OBSIDIAN_VAULT_PATH", "").strip()
-            )
-        if str(enabled).strip().lower() not in {"1", "true", "yes", "on"}:
-            return None
-        try:
-            from obsidian_telegram_bridge.config import BridgeConfig
-            from obsidian_telegram_bridge.storage import BridgeStore
-
-            db_path = str(
-                extra.get("business_memory_db")
-                or os.getenv("OBSIDIAN_BRIDGE_DB", "")
-            ).strip()
-            if db_path:
-                return BridgeStore(db_path)
-            bridge_config = BridgeConfig.from_env()
-            bridge_config.ensure_paths()
-            return BridgeStore(bridge_config.state_db)
-        except Exception:
-            logger.warning(
-                "[%s] Telegram Business memory bridge could not be initialized; "
-                "continuing without the buffer",
-                self.name,
-                exc_info=True,
-            )
-            return None
-
-    @staticmethod
-    def _business_message_text(message: Any) -> str:
-        text = getattr(message, "text", None) or getattr(message, "caption", None)
-        return str(text or "").strip()
-
-    @staticmethod
-    def _business_iso_timestamp(message: Any) -> str:
-        value = getattr(message, "date", None)
-        if value is not None and hasattr(value, "isoformat"):
-            try:
-                return str(value.isoformat())
-            except Exception:
-                pass
-        return datetime.now(timezone.utc).isoformat()
-
-    def _buffer_business_message(self, message: Any, *, is_edited: bool) -> Optional[MessageEvent]:
-        """Persist a Telegram Business message and build its optional reply event."""
-        text = self._business_message_text(message)
-        message_date = getattr(message, "date", None)
-        business_connection_id = str(
-            getattr(message, "business_connection_id", "") or ""
-        ).strip()
-        chat = getattr(message, "chat", None)
-        chat_id_raw = getattr(chat, "id", None)
-        message_id_raw = getattr(message, "message_id", None)
-        if not text or not business_connection_id or chat_id_raw is None or message_id_raw is None:
-            return None
-
-        user = getattr(message, "from_user", None)
-        sender_id_raw = getattr(user, "id", None)
-        sender_id = str(sender_id_raw).strip() if sender_id_raw is not None else ""
-        sender_name = str(
-            getattr(user, "full_name", None)
-            or getattr(user, "username", None)
-            or ""
-        ).strip() or None
-        chat_title = str(
-            getattr(chat, "title", None)
-            or getattr(chat, "full_name", None)
-            or ""
-        ).strip() or None
-        try:
-            chat_id = int(chat_id_raw)
-            message_id = int(message_id_raw)
-        except (TypeError, ValueError):
-            logger.warning("[%s] Ignoring malformed Telegram Business message IDs", self.name)
-            return None
-
-        direction = "outgoing" if sender_id in self._business_owner_ids() else "incoming"
-        store = getattr(self, "_business_memory_store", None)
-        if store is not None:
-            try:
-                store.add_business_message(
-                    business_connection_id=business_connection_id,
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    sender_id=int(sender_id) if sender_id.lstrip("-").isdigit() else None,
-                    sender_name=sender_name,
-                    chat_title=chat_title,
-                    direction=direction,
-                    text=text,
-                    created_at=self._business_iso_timestamp(message),
-                    is_edited=is_edited,
-                )
-            except Exception:
-                logger.warning(
-                    "[%s] Failed to buffer Telegram Business message %s/%s",
-                    self.name,
-                    chat_id,
-                    message_id,
-                    exc_info=True,
-                )
-
-        if direction != "incoming" or not self._business_auto_reply_enabled():
-            return None
-        allowed_ids = self._business_auto_reply_user_ids()
-        if allowed_ids and sender_id not in allowed_ids and "*" not in allowed_ids:
-            return None
-
-        chat_type = str(getattr(chat, "type", "private") or "private").lower()
-        if chat_type == "private":
-            normalized_chat_type = "dm"
-        elif chat_type in {"group", "supergroup"}:
-            normalized_chat_type = "group"
-        else:
-            normalized_chat_type = "channel"
-        source = self.build_source(
-            chat_id=str(chat_id),
-            chat_name=chat_title,
-            chat_type=normalized_chat_type,
-            user_id=sender_id or None,
-            user_name=sender_name,
-            message_id=str(message_id),
-            business_connection_id=business_connection_id,
-        )
-        return MessageEvent(
-            text=text,
-            message_type=MessageType.TEXT,
-            user_id=sender_id or None,
-            user_name=sender_name,
-            source=source,
-            raw_message=message,
-            message_id=str(message_id),
-            timestamp=(
-                message_date
-                if isinstance(message_date, datetime)
-                else datetime.now(timezone.utc)
-            ),
-            internal=True,
-            metadata={"telegram_business": True},
-        )
-
-    async def _handle_business_update(self, update: Update, context) -> None:
-        """Buffer Telegram Business messages and optionally dispatch auto-replies."""
-        messages = (
-            (getattr(update, "business_message", None), False),
-            (getattr(update, "edited_business_message", None), True),
-        )
-        for message, is_edited in messages:
-            if message is None:
-                continue
-            event = self._buffer_business_message(message, is_edited=is_edited)
-            if event is not None:
-                handler = getattr(self, "handle_message", None)
-                if callable(handler):
-                    await handler(event)
-
-        deleted = getattr(update, "deleted_business_messages", None)
-        store = getattr(self, "_business_memory_store", None)
-        if deleted is None or store is None:
-            return
-        business_connection_id = str(
-            getattr(deleted, "business_connection_id", "") or ""
-        ).strip()
-        chat = getattr(deleted, "chat", None)
-        message_ids = list(getattr(deleted, "message_ids", None) or [])
-        if not business_connection_id or getattr(chat, "id", None) is None or not message_ids:
-            return
-        try:
-            store.mark_deleted_business_messages(
-                business_connection_id=business_connection_id,
-                chat_id=int(chat.id),
-                message_ids=[int(message_id) for message_id in message_ids],
-                deleted_at="CURRENT_TIMESTAMP",
-            )
-        except Exception:
-            logger.warning(
-                "[%s] Failed to mark deleted Telegram Business messages",
-                self.name,
-                exc_info=True,
-            )
-
     async def _on_platform_update(self, update, context) -> None:
         """Catch-all PTB handler firing ``gateway_platform_event`` per inbound update.
 
@@ -4814,12 +4533,6 @@ class TelegramAdapter(BasePlatformAdapter):
         # inline_query updates otherwise), so registering unconditionally
         # is safe.
         app.add_handler(InlineQueryHandler(self._handle_inline_query))
-        # Telegram Business updates are not matched by the ordinary message
-        # filters. Register this catch-all only when the opt-in bridge or
-        # auto-reply path is configured, preserving the normal handler graph
-        # for installations that do not use Telegram Business.
-        if self._business_updates_enabled():
-            app.add_handler(TypeHandler(Update, self._handle_business_update))
         # gateway_platform_event observer (see _on_platform_update); group 99 so
         # it observes alongside, never displaces, the core handlers.
         app.add_handler(TypeHandler(Update, self._on_platform_update), group=99)
@@ -6160,8 +5873,6 @@ class TelegramAdapter(BasePlatformAdapter):
         if not self._bot:
             return SendResult(success=False, error="Not connected")
 
-        business_kwargs = self._business_connection_kwargs(metadata)
-
         # Rich finalize (Bot API 10.1): when the completed content has
         # constructs the legacy MarkdownV2 edit degrades (tables → bullet
         # lists, task lists, <details>, block math) and rich is available,
@@ -6219,7 +5930,6 @@ class TelegramAdapter(BasePlatformAdapter):
                     chat_id=normalize_telegram_chat_id(chat_id),
                     message_id=int(message_id),
                     text=content,
-                    **business_kwargs,
                 )
                 if _saturated_preview:
                     self._last_overflow_preview[_preview_key] = content
@@ -6232,7 +5942,6 @@ class TelegramAdapter(BasePlatformAdapter):
                     message_id=int(message_id),
                     text=formatted,
                     parse_mode=ParseMode.MARKDOWN_V2,
-                    **business_kwargs,
                 )
             except Exception as fmt_err:
                 # "Message is not modified" is a no-op, not an error
@@ -6250,7 +5959,6 @@ class TelegramAdapter(BasePlatformAdapter):
                     chat_id=normalize_telegram_chat_id(chat_id),
                     message_id=int(message_id),
                     text=_plain,
-                    **business_kwargs,
                 )
             return SendResult(success=True, message_id=message_id)
         except Exception as e:
@@ -6279,7 +5987,6 @@ class TelegramAdapter(BasePlatformAdapter):
                     chat_id=normalize_telegram_chat_id(chat_id),
                     message_id=int(message_id),
                     text=truncated,
-                    **business_kwargs,
                 )
                 self._last_overflow_preview[_preview_key] = truncated
                 return SendResult(success=True, message_id=message_id)
@@ -6301,7 +6008,6 @@ class TelegramAdapter(BasePlatformAdapter):
                         chat_id=normalize_telegram_chat_id(chat_id),
                         message_id=int(message_id),
                         text=content,
-                        **business_kwargs,
                     )
                     return SendResult(success=True, message_id=message_id)
                 except Exception as retry_err:
@@ -6389,7 +6095,6 @@ class TelegramAdapter(BasePlatformAdapter):
         chunks = self.truncate_message(
             content, self.MAX_MESSAGE_LENGTH, len_fn=utf16_len,
         )
-        business_kwargs = self._business_connection_kwargs(metadata)
         if len(chunks) <= 1:
             # Defensive: shouldn't happen given the caller's pre-flight, but
             # if truncate_message returned a single chunk just edit normally.
@@ -6410,7 +6115,6 @@ class TelegramAdapter(BasePlatformAdapter):
                         message_id=int(message_id),
                         text=formatted,
                         parse_mode=ParseMode.MARKDOWN_V2,
-                        **business_kwargs,
                     )
                 except Exception as fmt_err:
                     if "not modified" not in str(fmt_err).lower():
@@ -6423,14 +6127,12 @@ class TelegramAdapter(BasePlatformAdapter):
                             chat_id=normalize_telegram_chat_id(chat_id),
                             message_id=int(message_id),
                             text=_strip_mdv2(first_chunk),
-                            **business_kwargs,
                         )
             else:
                 await self._bot.edit_message_text(
                     chat_id=normalize_telegram_chat_id(chat_id),
                     message_id=int(message_id),
                     text=first_chunk,
-                    **business_kwargs,
                 )
         except Exception as e:
             err_str = str(e).lower()
@@ -6618,10 +6320,6 @@ class TelegramAdapter(BasePlatformAdapter):
         formatter permanently turns tables into bullet lists.
         """
         if not self._bot or not hasattr(self._bot, "send_message_draft"):
-            return False
-        if self._metadata_business_connection_id(metadata):
-            # ``sendMessageDraft`` has no Business API connection parameter;
-            # use the regular business-aware send/edit path instead.
             return False
         return (chat_type or "").lower() in {"dm", "private"}
 
@@ -9031,7 +8729,6 @@ class TelegramAdapter(BasePlatformAdapter):
                 chat_id=normalize_telegram_chat_id(chat_id),
                 action="typing",
                 message_thread_id=message_thread_id,
-                **self._business_connection_kwargs(metadata),
             )
             self._telegram_typing_cooldown_until.pop(str(chat_id), None)
         except Exception as e:
@@ -9043,7 +8740,6 @@ class TelegramAdapter(BasePlatformAdapter):
                     await self._bot.send_chat_action(
                         chat_id=normalize_telegram_chat_id(chat_id),
                         action="typing",
-                        **self._business_connection_kwargs(metadata),
                     )
                     self._telegram_typing_cooldown_until.pop(str(chat_id), None)
                     return
@@ -11267,10 +10963,6 @@ class TelegramAdapter(BasePlatformAdapter):
                 )
             ),
             thread_id=thread_id_str,
-            business_connection_id=(
-                str(getattr(message, "business_connection_id", "") or "").strip()
-                or None
-            ),
             chat_topic=chat_topic,
             message_id=str(message.message_id),
             is_bot=bool(getattr(user, "is_bot", False)) if user else False,

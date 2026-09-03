@@ -18556,7 +18556,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
           3. Catch-all busy-reject text. Rejecting is required rather than
              falling through to interrupt + discard: commands like /model,
              /reasoning, /voice, /insights, /title, /resume, /retry,
-             /undo, /compress, /tokens, /usage, /reload-mcp, /sethome, /reset (all
+             /undo, /compress, /usage, /reload-mcp, /sethome, /reset (all
              registered as Discord slash commands) would interrupt the
              agent AND get silently discarded by the slash-command safety
              net, producing a zero-char response. See #5057, #6252, #10370.
@@ -19964,11 +19964,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if canonical == "compress":
             return await self._handle_compress_command(event)
 
-        if canonical == "tokens":
-            return await self._handle_tokens_command(event)
-
-        if canonical == "limits":
-            return await self._handle_limits_command(event)
+        if canonical == "usage":
+            return await self._handle_usage_command(event)
 
         if canonical == "topup":
             return await self._handle_topup_command(event)
@@ -26820,34 +26817,6 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if profile and metadata is not None:
             metadata = dict(metadata)
             metadata["hermes_profile"] = profile
-        business_connection_id = getattr(source, "business_connection_id", None)
-        if business_connection_id:
-            metadata = dict(metadata or {})
-            metadata["business_connection_id"] = str(business_connection_id)
-        return metadata
-
-    @staticmethod
-    def _reply_metadata_for_source(
-        source,
-        thread_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Return the minimal reply metadata for a persisted source.
-
-        This compatibility helper is intentionally independent of a runner
-        instance so delivery code and older downstream integrations can build
-        a Telegram Business reply envelope from a ``SessionSource`` alone.
-        """
-        effective_thread_id = (
-            getattr(source, "thread_id", None)
-            if thread_id is None
-            else thread_id
-        )
-        metadata: Dict[str, Any] = {}
-        if effective_thread_id is not None:
-            metadata["thread_id"] = str(effective_thread_id)
-        business_connection_id = getattr(source, "business_connection_id", None)
-        if business_connection_id:
-            metadata["business_connection_id"] = str(business_connection_id)
         return metadata
 
     def _thread_metadata_for_target(
@@ -33307,7 +33276,42 @@ def _run_planned_stop_watcher(
         stop_event.wait(poll_interval)
 
 
-def _start_gateway_housekeeping(stop_event: threading.Event, adapters=None, loop=None, interval: int = 60, cron_provider=None):
+def _drain_restart_safe_cron_deliveries(adapters, loop, runner=None) -> None:
+    """Drain each profile's worker queue through its matching live adapters."""
+    from cron import scheduler as cron_scheduler
+
+    if runner is None:
+        if adapters is not None:
+            cron_scheduler.drain_delivery_queue(adapters, loop)
+        return
+    for profile_name, profile_home in _handoff_watch_scopes(runner):
+        scoped_home = profile_home or get_hermes_home()
+        if profile_name is None:
+            profile_adapters = adapters
+        else:
+            profile_adapters = getattr(runner, "_profile_adapters", {}).get(
+                profile_name
+            )
+        if profile_adapters is None:
+            continue
+        with _profile_runtime_scope(scoped_home):
+            if profile_name is not None and not profile_adapters and adapters:
+                routes = cron_scheduler._primary_profile_routes_for_current_home()
+                if routes:
+                    profile_adapters = cron_scheduler.SharedRouteAdapters(
+                        adapters, routes
+                    )
+            cron_scheduler.drain_delivery_queue(profile_adapters, loop)
+
+
+def _start_gateway_housekeeping(
+    stop_event: threading.Event,
+    adapters=None,
+    loop=None,
+    interval: int = 60,
+    cron_provider=None,
+    runner=None,
+):
     """Background thread for gateway-only periodic chores (NOT cron).
 
     Split out of the historical ``_start_cron_ticker`` so the cron *trigger*
@@ -33361,6 +33365,16 @@ def _start_gateway_housekeeping(stop_event: threading.Event, adapters=None, loop
     tick_count = 0
     while not stop_event.is_set():
         tick_count += 1
+
+        # Restart-safe cron workers run outside the gateway cgroup and queue
+        # their final send for whichever gateway instance is live.  Drain on
+        # the gateway-wide housekeeper rather than the built-in scheduler tick:
+        # external providers do not run that ticker.
+        if adapters is not None or runner is not None:
+            try:
+                _drain_restart_safe_cron_deliveries(adapters, loop, runner)
+            except Exception as exc:
+                logger.debug("Cron durable delivery queue drain error: %s", exc)
 
         if tick_count % CHANNEL_DIR_EVERY == 0 and adapters:
             try:
@@ -34543,6 +34557,7 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
             "adapters": runner.adapters,
             "loop": asyncio.get_running_loop(),
             "cron_provider": cron_provider,
+            "runner": runner,
         },
         daemon=True,
         name="gateway-housekeeping",
