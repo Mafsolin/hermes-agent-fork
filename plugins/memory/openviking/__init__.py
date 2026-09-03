@@ -1273,14 +1273,11 @@ def _write_env_vars(env_path: Path, env_writes: dict, remove_keys: tuple[str, ..
             new_lines.append(f"{key}={_env_line_safe(val)}")
     # Pre-create with 0600 so secrets are never briefly world-readable.
     _precreate_secret_file(env_path)
-    # ``Path.write_text`` uses the platform newline policy on Windows and
-    # silently turns the canonical LF separators above into CRLF. Keep this
-    # credentials file stable across platforms; ``surrogateescape`` still
-    # round-trips unrelated non-UTF-8 bytes from the read path.
-    with env_path.open(
-        "w", encoding="utf-8", errors="surrogateescape", newline="\n"
-    ) as stream:
-        stream.write("\n".join(new_lines) + ("\n" if new_lines else ""))
+    env_path.write_text(
+        "\n".join(new_lines) + ("\n" if new_lines else ""),
+        encoding="utf-8",
+        errors="surrogateescape",
+    )
     _restrict_secret_file_permissions(env_path)
 
 
@@ -5057,17 +5054,9 @@ class OpenVikingMemoryProvider(MemoryProvider):
 
         endpoint = "/api/v1/search/search" if mode == "deep" else "/api/v1/search/find"
         if endpoint == "/api/v1/search/search" and self._session_id:
-            session_payload = {**payload, "session_id": self._session_id}
-            try:
-                resp = self._client.post(endpoint, session_payload)
-            except Exception as exc:
-                logger.debug(
-                    "OpenViking session-aware deep search failed; retrying without session context: %s",
-                    exc,
-                )
-                resp = self._client.post(endpoint, payload)
-        else:
-            resp = self._client.post(endpoint, payload)
+            payload["session_id"] = self._session_id
+
+        resp = self._client.post(endpoint, payload)
         result = resp.get("result", {})
 
         # Format results for the model — keep it concise
