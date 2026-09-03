@@ -18556,7 +18556,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
           3. Catch-all busy-reject text. Rejecting is required rather than
              falling through to interrupt + discard: commands like /model,
              /reasoning, /voice, /insights, /title, /resume, /retry,
-             /undo, /compress, /usage, /reload-mcp, /sethome, /reset (all
+             /undo, /compress, /tokens, /usage, /reload-mcp, /sethome, /reset (all
              registered as Discord slash commands) would interrupt the
              agent AND get silently discarded by the slash-command safety
              net, producing a zero-char response. See #5057, #6252, #10370.
@@ -19964,8 +19964,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if canonical == "compress":
             return await self._handle_compress_command(event)
 
-        if canonical == "usage":
-            return await self._handle_usage_command(event)
+        if canonical == "tokens":
+            return await self._handle_tokens_command(event)
+
+        if canonical == "limits":
+            return await self._handle_limits_command(event)
 
         if canonical == "topup":
             return await self._handle_topup_command(event)
