@@ -48,8 +48,27 @@ mcp_servers:
       prompts: false
       resources: false
 
+# Web search backend selection
+# ---------------------------
+# Two web-search tools are available side by side so there is a real choice,
+# not just a single hardcoded backend:
+#   1. Native "web_search" / "web_extract" (toolset "web") — routed through
+#      agent/web_search_registry.py. With no paid key configured it still
+#      works via the keyless free-tier walk (exa -> parallel -> firecrawl ->
+#      keenable), controlled by web.keyless_fallback (default: true).
+#   2. Mafsolin Search via MCP (toolset "mcp-search", tool name
+#      mcp__search__web_search) — uses MAFSOLIN_SEARCH_API_KEY.
+#
+# Both toolsets are enabled below so the agent always has two independent
+# search tools it can call. To pin ONE backend explicitly instead of leaving
+# both available:
+#   - Prefer Mafsolin only: remove "web" from the toolsets list below.
+#   - Prefer the native/keyless backend only: remove "mcp-search" instead.
+#   - Pin a specific native provider (once its key is configured, e.g.
+#     TAVILY_API_KEY): set `web.search_backend: "tavily"` at the top level.
 toolsets:
   - "hermes-cli"
+  - "web"
   - "mcp-search"
 
 custom_providers:

@@ -72,6 +72,13 @@ Afsol формат `custom_providers` и содержит:
 - Mafsolin Search для `web_search` — отдельный MCP-сервер `mcp_servers.search`,
   ключ `MAFSOLIN_SEARCH_API_KEY`; это не `web.search_backend` и не LLM-модель
   провайдера Mafsolin;
+- Выбор web-search backend: overlay включает **оба** инструмента —
+  нативный `web_search`/`web_extract` (toolset `web`, с keyless free-tier
+  fallback при отсутствии платного ключа) и Mafsolin Search через MCP
+  (toolset `mcp-search`). Модель видит два независимых инструмента поиска
+  и не привязана намертво к одному backend'у. Чтобы закрепить только один,
+  убери соответствующий toolset из overlay (см. комментарий в
+  `runtime/afsol-provider-config.example.yaml`);
 - `ModelHub` — `https://modelhub.my/v1`, ключ из `MODELHUB_API_KEY`,
   10 моделей, default `claude-sonnet-5`;
 - `Mafsolin` — `https://api.mafsolin.space/v1`, ключ из
